@@ -1,0 +1,22 @@
+# Core inference stack for FLUX.1 / FLUX.2 / Qwen-Image with diffusers.
+#
+# IMPORTANT:
+#  * FLUX.2 and Qwen-Image are recent; they require a current diffusers.
+#    If `Flux2Pipeline` / `QwenImagePipeline` import fails, install diffusers
+#    from git:  pip install "git+https://github.com/huggingface/diffusers"
+#  * Install a CUDA build of torch to use your GPU. The default torch on this
+#    machine is CPU-only. Pick the right index URL for your CUDA version, e.g.:
+#      pip install torch --index-url https://download.pytorch.org/whl/cu124
+
+torch>=2.4
+diffusers>=0.36
+transformers>=4.49
+accelerate>=1.0
+safetensors>=0.4
+pillow>=10.0
+sentencepiece>=0.2        # required by some text encoders (T5 / Qwen tokenizer)
+protobuf>=4.25
+
+# Optional: 4-bit / 8-bit quantization (huge VRAM savings, CUDA only).
+# Enable with `--quantize 4bit`. Comment out if you are CPU-only.
+bitsandbytes>=0.43 ; platform_system != "Darwin"
