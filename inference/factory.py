@@ -115,6 +115,15 @@ def build_pipeline(
     if quant_cfg is not None:
         load_kwargs["quantization_config"] = quant_cfg
 
+    # bitsandbytes-quantized weights are incompatible with sequential CPU offload:
+    # accelerate tries to rebuild Params4bit/Int8Params on the `meta` device and the
+    # bnb/accelerate versions disagree (TypeError: unexpected '_is_hf_initialized').
+    # Model-level offload works fine and gives nearly the same VRAM savings.
+    if quant_cfg is not None and offload == "sequential":
+        print("[warn] sequential offload is incompatible with bitsandbytes quantization; "
+              "falling back to --offload model.")
+        offload = "model"
+
     print(f"[load] {spec.pipeline_class} <- {repo}")
     print(f"[load] device={device} dtype={torch_dtype} quantize={quantize} offload={offload}")
     pipe = pipe_cls.from_pretrained(repo, **load_kwargs)
