@@ -28,8 +28,8 @@ import os
 import sys
 import time
 
-from Inference_Flux_Qwen.inference.config import MODEL_REGISTRY
-from Inference_Flux_Qwen.inference.factory import (
+from inference.config import MODEL_REGISTRY
+from inference.factory import (
     GenerationConfig,
     build_pipeline,
     generate,
