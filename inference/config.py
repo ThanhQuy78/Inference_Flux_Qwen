@@ -57,7 +57,10 @@ MODEL_REGISTRY: dict[str, ModelSpec] = {
     # Open default: klein (Apache-2.0, distilled). Dev: black-forest-labs/FLUX.2-dev (gated).
     "flux2": ModelSpec(
         key="flux2",
-        pipeline_class="Flux2Pipeline",
+        # klein -> Flux2KleinPipeline (Qwen3 text encoder);
+        # FLUX.2-dev -> Flux2Pipeline (Mistral-3). The correct class is resolved
+        # from each repo's model_index.json; this is just a hint for errors.
+        pipeline_class="Flux2KleinPipeline",
         default_repo="black-forest-labs/FLUX.2-klein-9B",
         steps=28,
         guidance_scale=4.0,

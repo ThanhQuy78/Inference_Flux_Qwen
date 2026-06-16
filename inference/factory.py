@@ -8,7 +8,6 @@ guidance vs. real CFG, negative prompts, sizes).
 
 from __future__ import annotations
 
-import importlib
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Optional
@@ -38,15 +37,26 @@ def resolve_dtype(requested: str, device: str) -> torch.dtype:
     return torch.bfloat16 if device == "cuda" else torch.float32
 
 
-def _load_pipeline_class(name: str):
-    diffusers = importlib.import_module("diffusers")
+def _load_pipeline(repo: str, spec: ModelSpec, load_kwargs: dict):
+    """Load a pipeline, letting diffusers pick the exact class from the repo's
+    model_index.json (`_class_name`).
+
+    This is more robust than hardcoding a class per family: e.g. FLUX.2 [dev]
+    declares `Flux2Pipeline` (Mistral-3 text encoder) while FLUX.2 [klein]
+    declares `Flux2KleinPipeline` (Qwen3 text encoder). Hardcoding one breaks
+    the other; `DiffusionPipeline.from_pretrained` reads the right one.
+    """
+    from diffusers import DiffusionPipeline
+
     try:
-        return getattr(diffusers, name)
-    except AttributeError as e:
+        return DiffusionPipeline.from_pretrained(repo, **load_kwargs)
+    except (ValueError, ImportError, AttributeError, OSError) as e:
         raise ImportError(
-            f"diffusers has no '{name}'. Your diffusers is likely too old for this "
-            f"model. Install the latest:\n"
-            f"  pip install -U 'git+https://github.com/huggingface/diffusers'"
+            f"Could not load '{repo}'. Your installed diffusers may be too old for "
+            f"this checkpoint (it expects a pipeline like '{spec.pipeline_class}'). "
+            f"Upgrade and retry:\n"
+            f"  pip install -U 'git+https://github.com/huggingface/diffusers'\n"
+            f"Original error: {type(e).__name__}: {e}"
         ) from e
 
 
@@ -106,8 +116,6 @@ def build_pipeline(
             f"Resolved device is '{device}'."
         )
 
-    pipe_cls = _load_pipeline_class(spec.pipeline_class)
-
     load_kwargs: dict = {"torch_dtype": torch_dtype}
     if hf_token:
         load_kwargs["token"] = hf_token
@@ -126,7 +134,7 @@ def build_pipeline(
 
     print(f"[load] {spec.pipeline_class} <- {repo}")
     print(f"[load] device={device} dtype={torch_dtype} quantize={quantize} offload={offload}")
-    pipe = pipe_cls.from_pretrained(repo, **load_kwargs)
+    pipe = _load_pipeline(repo, spec, load_kwargs)
 
     # Placement. Offloading and an explicit .to(device) are mutually exclusive;
     # offloading manages device placement itself and must NOT be combined with .to().
