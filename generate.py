@@ -78,6 +78,9 @@ def build_parser() -> argparse.ArgumentParser:
                    help="bitsandbytes quantization (CUDA only)")
     p.add_argument("--offload", default="none", choices=["none", "model", "sequential"],
                    help="CPU offload strategy for low VRAM")
+    p.add_argument("--device-map", default="none", choices=["none", "balanced"],
+                   help="split the model across multiple GPUs (balanced); fits models "
+                        "too big for one card. Mutually exclusive with --offload.")
     p.add_argument("--no-vae-slicing", action="store_true", help="disable VAE slicing")
     p.add_argument("--vae-tiling", action="store_true", help="enable VAE tiling (very low VRAM)")
     p.add_argument("--hf-token", default=os.environ.get("HF_TOKEN"),
@@ -103,6 +106,7 @@ def main(argv: list[str] | None = None) -> int:
         dtype=args.dtype,
         quantize=args.quantize,
         offload=args.offload,
+        device_map=args.device_map,
         vae_slicing=not args.no_vae_slicing,
         vae_tiling=args.vae_tiling,
         hf_token=args.hf_token,

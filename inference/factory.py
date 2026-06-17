@@ -92,6 +92,7 @@ def build_pipeline(
     dtype: str = "auto",
     quantize: str = "none",          # none | 4bit | 8bit
     offload: str = "none",           # none | model | sequential
+    device_map: str = "none",        # none | balanced (split across GPUs)
     vae_slicing: bool = True,
     vae_tiling: bool = False,
     hf_token: Optional[str] = None,
@@ -107,12 +108,29 @@ def build_pipeline(
             f"Resolved device is '{device}'."
         )
 
+    use_device_map = device_map != "none"
+    if use_device_map:
+        if device != "cuda":
+            raise RuntimeError(
+                f"--device-map {device_map} requires CUDA GPUs. Resolved device is '{device}'."
+            )
+        n_gpus = torch.cuda.device_count()
+        if n_gpus < 2:
+            print(f"[warn] --device-map {device_map} found only {n_gpus} CUDA device(s); "
+                  f"it still works but gives no benefit over a single-GPU load.")
+        if offload != "none":
+            print(f"[warn] --device-map {device_map} manages placement itself; ignoring "
+                  f"--offload {offload}.")
+            offload = "none"
+
     load_kwargs: dict = {"torch_dtype": torch_dtype}
     if hf_token:
         load_kwargs["token"] = hf_token
     quant_cfg = _build_quant_config(spec, quantize, torch_dtype)
     if quant_cfg is not None:
         load_kwargs["quantization_config"] = quant_cfg
+    if use_device_map:
+        load_kwargs["device_map"] = device_map
 
     if quant_cfg is not None and offload == "sequential":
         print("[warn] sequential offload is incompatible with bitsandbytes quantization; "
@@ -120,10 +138,13 @@ def build_pipeline(
         offload = "model"
 
     print(f"[load] {spec.pipeline_class} <- {repo}")
-    print(f"[load] device={device} dtype={torch_dtype} quantize={quantize} offload={offload}")
+    print(f"[load] device={device} dtype={torch_dtype} quantize={quantize} "
+          f"offload={offload} device_map={device_map}")
     pipe = _load_pipeline(repo, spec, load_kwargs)
 
-    if offload == "model":
+    if use_device_map:
+        pass  # components already distributed across GPUs by from_pretrained
+    elif offload == "model":
         pipe.enable_model_cpu_offload()
     elif offload == "sequential":
         pipe.enable_sequential_cpu_offload()
