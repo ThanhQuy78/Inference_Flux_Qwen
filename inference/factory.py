@@ -143,8 +143,7 @@ def build_pipeline(
     elif offload == "sequential":
         pipe.enable_sequential_cpu_offload()
     elif offload == "none":
-        if quant_cfg is None:          # bnb-quantized weights are already pinned to GPU
-            pipe.to(device)
+        pipe.to(device)
     else:
         raise ValueError(f"Unknown offload mode: {offload}")
 
