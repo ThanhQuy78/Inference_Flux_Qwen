@@ -24,7 +24,7 @@ class ModelSpec:
     default_repo: str              # HF repo id for the open/fast variant
     # --- sampling defaults (all overridable on the CLI) ---
     steps: int = 28
-    guidance_scale: float = 3.5    # distilled guidance (flux) -> passed as guidance_scale
+    guidance_scale: float = 3.5    # distilled guidance (flux) 
     true_cfg_scale: Optional[float] = None  # set for real CFG models (Qwen)
     supports_negative: bool = False
     default_negative: str = ""

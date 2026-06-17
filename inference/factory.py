@@ -17,9 +17,6 @@ import torch
 from .config import ModelSpec, get_spec
 
 
-# --------------------------------------------------------------------------- #
-# Device / dtype helpers
-# --------------------------------------------------------------------------- #
 def resolve_device(requested: str = "auto") -> str:
     if requested != "auto":
         return requested
@@ -33,18 +30,12 @@ def resolve_device(requested: str = "auto") -> str:
 def resolve_dtype(requested: str, device: str) -> torch.dtype:
     if requested != "auto":
         return {"bf16": torch.bfloat16, "fp16": torch.float16, "fp32": torch.float32}[requested]
-    # bf16 is the native dtype for all three families on CUDA; CPU stays fp32.
     return torch.bfloat16 if device == "cuda" else torch.float32
 
 
 def _load_pipeline(repo: str, spec: ModelSpec, load_kwargs: dict):
     """Load a pipeline, letting diffusers pick the exact class from the repo's
     model_index.json (`_class_name`).
-
-    This is more robust than hardcoding a class per family: e.g. FLUX.2 [dev]
-    declares `Flux2Pipeline` (Mistral-3 text encoder) while FLUX.2 [klein]
-    declares `Flux2KleinPipeline` (Qwen3 text encoder). Hardcoding one breaks
-    the other; `DiffusionPipeline.from_pretrained` reads the right one.
     """
     from diffusers import DiffusionPipeline
 
@@ -68,7 +59,7 @@ def _build_quant_config(spec: ModelSpec, mode: str, compute_dtype: torch.dtype):
     """
     if mode == "none":
         return None
-    from diffusers import PipelineQuantizationConfig  # lazy: only when requested
+    from diffusers import PipelineQuantizationConfig  
 
     if mode == "4bit":
         backend = "bitsandbytes_4bit"
@@ -123,10 +114,6 @@ def build_pipeline(
     if quant_cfg is not None:
         load_kwargs["quantization_config"] = quant_cfg
 
-    # bitsandbytes-quantized weights are incompatible with sequential CPU offload:
-    # accelerate tries to rebuild Params4bit/Int8Params on the `meta` device and the
-    # bnb/accelerate versions disagree (TypeError: unexpected '_is_hf_initialized').
-    # Model-level offload works fine and gives nearly the same VRAM savings.
     if quant_cfg is not None and offload == "sequential":
         print("[warn] sequential offload is incompatible with bitsandbytes quantization; "
               "falling back to --offload model.")
@@ -136,8 +123,6 @@ def build_pipeline(
     print(f"[load] device={device} dtype={torch_dtype} quantize={quantize} offload={offload}")
     pipe = _load_pipeline(repo, spec, load_kwargs)
 
-    # Placement. Offloading and an explicit .to(device) are mutually exclusive;
-    # offloading manages device placement itself and must NOT be combined with .to().
     if offload == "model":
         pipe.enable_model_cpu_offload()
     elif offload == "sequential":
@@ -147,7 +132,6 @@ def build_pipeline(
     else:
         raise ValueError(f"Unknown offload mode: {offload}")
 
-    # VAE memory savings (cheap, big help at high resolutions / low VRAM).
     vae = getattr(pipe, "vae", None)
     if vae is not None:
         if vae_slicing and hasattr(pipe, "enable_vae_slicing"):
@@ -155,7 +139,7 @@ def build_pipeline(
         if vae_tiling and hasattr(pipe, "enable_vae_tiling"):
             pipe.enable_vae_tiling()
 
-    pipe._zen_spec = spec  # stash for generate()
+    pipe._zen_spec = spec  
     pipe._zen_device = device
     return pipe
 
@@ -186,7 +170,6 @@ def _build_call_kwargs(spec: ModelSpec, cfg: GenerationConfig, device: str) -> d
     }
 
     if spec.true_cfg_scale is not None:
-        # Real CFG model (Qwen): true_cfg_scale + negative_prompt.
         kwargs["true_cfg_scale"] = (
             cfg.true_cfg_scale if cfg.true_cfg_scale is not None else spec.true_cfg_scale
         )
@@ -195,7 +178,6 @@ def _build_call_kwargs(spec: ModelSpec, cfg: GenerationConfig, device: str) -> d
             neg = spec.default_negative
         kwargs["negative_prompt"] = neg
     else:
-        # Distilled-guidance model (FLUX). No CFG / negative prompt.
         kwargs["guidance_scale"] = (
             cfg.guidance_scale if cfg.guidance_scale is not None else spec.guidance_scale
         )
@@ -206,8 +188,6 @@ def _build_call_kwargs(spec: ModelSpec, cfg: GenerationConfig, device: str) -> d
         kwargs["max_sequence_length"] = spec.max_sequence_length
 
     if cfg.seed is not None:
-        # Generator must live on a real device; CPU is safe and reproducible
-        # even when the pipeline is offloaded.
         gen_device = "cpu" if device in ("cpu", "mps") else device
         kwargs["generator"] = torch.Generator(device=gen_device).manual_seed(cfg.seed)
 

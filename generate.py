@@ -28,6 +28,13 @@ import os
 import sys
 import time
 
+# Reduce CUDA fragmentation so the loader's caching-allocator warmup can grow
+# into reserved space instead of demanding one large contiguous block. This is
+# the common fix for "CUDA out of memory" raised inside _caching_allocator_warmup
+# while loading big (quantized) models. Must be set before torch initializes CUDA;
+# setdefault lets the user override it from the environment.
+os.environ.setdefault("PYTORCH_CUDA_ALLOC_CONF", "expandable_segments:True")
+
 from inference.config import MODEL_REGISTRY
 from inference.factory import (
     GenerationConfig,
